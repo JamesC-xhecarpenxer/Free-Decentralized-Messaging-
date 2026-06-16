@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Converge Messages</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl.js/1.0.3/nacl.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl.js/1.0.3/nacl-util.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    
+    body {
+      display: flex;
+      gap: 8px;
+      padding: 8px;
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    .device {
+      flex: 1;
+      min-width: 400px;
+      max-width: 450px;
+      background: white;
+      border: 2px solid #ddd;
+      border-radius: 20px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    }
+
+    .device.active {
+      border-color: #007AFF;
+      box-shadow: 0 8px 24px rgba(0,122,255,0.3);
+    }
+
+    .device-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 12px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .device-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .device-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #fff;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .status-dot.synced {
+      animation: none;
+    }
+
+    .nav-bar {
+      height: 56px;
+      padding: 0 16px;
+      border-bottom: 0.5px solid #e0e0e0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .nav-title {
+      flex: 1;
+      text-align: center;
+    }
+
+    .nav-button {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #f2f2f2;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.2s;
+    }
+
+    .nav-button:hover {
+      background: #e0e0e0;
+    }
+
+    .chat-view {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .timestamp {
+      font-size: 12px;
+      color: #999;
+      text-align: center;
+      margin: 12px 0;
+      font-weight: 500;
+    }
+
+    .message {
+      display: flex;
+      margin-bottom: 2px;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.sent {
+      justify-content: flex-end;
+    }
+
+    .message.received {
+      justify-content: flex-start;
+    }
+
+    .message-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .message.sent .message-wrapper {
+      align-items: flex-end;
+    }
+
+    .bubble {
+      max-width: 280px;
+      padding: 8px 12px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.4;
+      word-wrap: break-word;
+      animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .message.sent .bubble {
+      background: #007AFF;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.received .bubble {
+      background: #e5e5ea;
+      color: #333;
+      border-bottom-left-radius: 4px;
+    }
+
+    .status-badge {
+      font-size: 10px;
+      color: #999;
+      font-weight: 500;
+    }
+
+    .status-badge.synced {
+      color: #34c759;
+    }
+
+    .input-area {
+      height: 56px;
+      padding: 8px 16px 16px;
+      background: white;
+      border-top: 0.5px solid #e0e0e0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .input-field {
+      flex: 1;
+      background: #f2f2f2;
+      border: 0.5px solid #e0e0e0;
+      border-radius: 20px;
+      padding: 10px 16px;
+      font-size: 15px;
+      color: #333;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-field:focus {
+      border-color: #007AFF;
+    }
+
+    .send-btn {
+      width: 32px;
+      height: 32px;
+      background: #007AFF;
+      border: none;
+      border-radius: 50%;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      transition: transform 0.1s;
+    }
+
+    .send-btn:active {
+      transform: scale(0.95);
+    }
+
+    .info-panel {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .info-panel.open {
+      display: flex;
+    }
+
+    .info-modal {
+      background: white;
+      border-radius: 12px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .info-modal h2 {
+      font-size: 18px;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    .info-section {
+      margin-bottom: 16px;
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .info-value {
+      font-size: 12px;
+      background: #f5f5f5;
+      padding: 8px 12px;
+      border-radius: 6px;
+      word-break: break-all;
+      font-family: monospace;
+      font-weight: 500;
+    }
+
+    .close-modal {
+      float: right;
+      background: #f2f2f2;
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .close-modal:hover {
+      background: #e0e0e0;
+    }
+
+    .state-debug {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f9f9f9;
+      border: 0.5px solid #ddd;
+      border-radius: 6px;
+      font-size: 11px;
+      color: #666;
+      line-height: 1.6;
+      font-family: monospace;
+    }
+
+    .controls {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      background: white;
+      border: 0.5px solid #ddd;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-width: 300px;
+      font-size: 12px;
+    }
+
+    .controls h3 {
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .control-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .control-btn {
+      flex: 1;
+      padding: 6px 12px;
+      background: #f2f2f2;
+      border: 0.5px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    .control-btn:hover {
+      background: #e0e0e0;
+    }
+
+    .control-btn.danger {
+      background: #ff3b30;
+      color: white;
+      border-color: #ff3b30;
+    }
+
+    .control-btn.danger:hover {
+      background: #ff1e0a;
+    }
+  </style>
+</head>
+<body>
+
+<div class="device" id="device1">
+  <div class="device-header">
+    <span class="device-name">Alice's iPhone</span>
+    <div class="device-status">
+      <div class="status-dot"></div>
+      <span id="status1">Syncing</span>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <button class="nav-button" onclick="toggleInfo(1)">ℹ️</button>
+    <div class="nav-title">Converge</div>
+    <button class="nav-button" onclick="toggleInfo(1)">⚙️</button>
+  </div>
+
+  <div class="chat-view" id="chat1">
+    <div class="timestamp">Today, 2:14 PM</div>
+  </div>
+
+  <div class="input-area">
+    <input type="text" class="input-field" placeholder="Message" id="input1" />
+    <button class="send-btn" onclick="sendMessage(1)">→</button>
+  </div>
+
+  <div class="info-panel" id="info1">
+    <div class="info-modal">
+      <button class="close-modal" onclick="toggleInfo(1)">✕</button>
+      <h2>Conversation State</h2>
+      <div class="info-section">
+        <div class="info-label">Your Public Key</div>
+        <div class="info-value" id="pk1">Loading...</div>
+      </div>
+      <div class="info-section">
+        <div class="info-label">Conversation Hash</div>
+        <div class="info-value" id="convHash1">Loading...</div>
+      </div>
+      <div class="info-section">
+        <div class="info-label">Message Count</div>
+        <div class="info-value" id="msgCount1">0</div>
+      </div>
+      <div class="info-section">
+        <div class="info-label">State Invariants</div>
+        <div class="info-value" id="invariants1">Checking...</div>
+      </div>
+      <div class="state-debug" id="debug1"></div>
+    </div>
+  </div>
+</div>
+
+<div class="device" id="device2">
+  <div class="device-header">
+    <span class="device-name">Bob's MacBook</span>
+    <div class="device-status">
+      <div class="status-dot"></div>
+      <span id="status2">Syncing</span>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <button class="nav-button" onclick="toggleInfo(2)">ℹ️</button>
+    <div class="nav-title">Converge</div>
+    <button class="nav-button" onclick="toggleInfo(2)">⚙️</button>
+  </div>
+
+  <div class="chat-view" id="chat2">
+    <div class="timestamp">Today, 2:14 PM</div>
+  </div>
+
+  <div class="input-area">
+    <input type="text" class="input-field" placeholder="Message" id="input2" />
+    <button class="send-btn" onclick="sendMessage(2)">→</button>
+  </div>
+
+  <div class="info-panel" id="info2">
+    <div class="info-modal">
+      <button class="close-modal" onclick="toggleInfo(2)">✕</button>
+      <h2>Conversation State</h2>
+      <div class="info-section">
+        <div class="info-label">Your Public Key</div>
+        <div class="info-value" id="pk2">Loading...</div>
+      </div>
+      <div class="info-section">
+        <div class="info-label">Conversation Hash</div>
+        <div class="info-value" id="convHash2">Loading...</div>
+      </div>
+      <div class="info-section">
+        <div class="info-label">Message Count</div>
+        <div class="info-value" id="msgCount2">0</div>
+      </div>
+      <div class="info-section">
+        <div class="info-label">State Invariants</div>
+        <div class="info-value" id="invariants2">Checking...</div>
+      </div>
+      <div class="state-debug" id="debug2"></div>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <h3>Network</h3>
+  <div class="control-row">
+    <button class="control-btn" onclick="manualSync()">🔄 Sync</button>
+    <button class="control-btn" onclick="disconnect()">🔌 Disconnect</button>
+  </div>
+  <div class="control-row">
+    <button class="control-btn" onclick="testCausalOrdering()">📊 Test DAG</button>
+    <button class="control-btn danger" onclick="reset()">Reset All</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CRYPTOGRAPHY & HASHING (NaCl.js)
+// ============================================================
+
+function hexEncode(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hashString(str) {
+  const bytes = nacl.util.decodeUTF8(str);
+  const hash = nacl.hash(bytes);
+  return hexEncode(hash).substring(0, 16);
+}
+
+function signMessage(msg, secretKey) {
+  const bytes = nacl.util.decodeUTF8(JSON.stringify(msg));
+  const sig = nacl.sign.detached(bytes, secretKey);
+  return hexEncode(sig);
+}
+
+function verifySignature(msg, sig, publicKey) {
+  try {
+    const bytes = nacl.util.decodeUTF8(JSON.stringify(msg));
+    const sigBytes = Uint8Array.from(sig.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+    const pkBytes = Uint8Array.from(publicKey.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+    return nacl.sign.detached.verify(bytes, sigBytes, pkBytes);
+  } catch (e) {
+    return false;
+  }
+}
+
+// ============================================================
+// CONVERSATION STATE (Duality Model)
+// ============================================================
+
+class ConversationState {
+  constructor(deviceId) {
+    this.deviceId = deviceId;
+    const keys = nacl.sign.keyPair();
+    this.publicKey = hexEncode(keys.publicKey).substring(0, 16);
+    this.secretKey = keys.secretKey;
+    this.messagesByID = new Map();
+    this.messageOrder = []; // causal DAG (topologically sorted)
+    this.parentLinks = new Map(); // id -> parentId
+    this.lastParent = null;
+  }
+
+  // INVARIANT 1: Causal ordering is acyclic
+  _validateNoCycles() {
+    const visited = new Set();
+    const visiting = new Set();
+
+    const hasCycle = (id) => {
+      if (visited.has(id)) return false;
+      if (visiting.has(id)) return true;
+      visiting.add(id);
+      const parent = this.parentLinks.get(id);
+      if (parent && hasCycle(parent)) return true;
+      visiting.delete(id);
+      visited.add(id);
+      return false;
+    };
+
+    for (const [id] of this.messagesByID) {
+      if (!visited.has(id) && hasCycle(id)) return false;
+    }
+    return true;
+  }
+
+  // INVARIANT 2: All messages are signed and verifiable
+  _validateSignatures() {
+    for (const [id, msg] of this.messagesByID) {
+      if (!msg.signature || !verifySignature({ id: msg.id, author: msg.author, parent: msg.parent, timestamp: msg.timestamp, ciphertext: msg.ciphertext }, msg.signature, msg.author)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // INVARIANT 3: Parent references exist (causal closure)
+  _validateCausalClosure() {
+    for (const [id, msg] of this.messagesByID) {
+      if (msg.parent && !this.messagesByID.has(msg.parent)) {
+        return false; // parent doesn't exist
+      }
+    }
+    return true;
+  }
+
+  validateInvariants() {
+    return {
+      noCycles: this._validateNoCycles(),
+      allSigned: this._validateSignatures(),
+      causalClosure: this._validateCausalClosure(),
+      allValid: this._validateNoCycles() && this._validateSignatures() && this._validateCausalClosure()
+    };
+  }
+
+  addMessage(text, author = null) {
+    author = author || this.publicKey;
+    const id = hashString(text + Math.random() + Date.now());
+    const msg = {
+      id,
+      author,
+      parent: this.lastParent,
+      timestamp: Date.now(),
+      ciphertext: text
+    };
+    msg.signature = signMessage({
+      id: msg.id,
+      author: msg.author,
+      parent: msg.parent,
+      timestamp: msg.timestamp,
+      ciphertext: msg.ciphertext
+    }, this.secretKey);
+
+    this.messagesByID.set(id, msg);
+    this.parentLinks.set(id, msg.parent);
+    this.messageOrder.push(id);
+    this.lastParent = id;
+    return msg;
+  }
+
+  getState() {
+    return {
+      deviceId: this.deviceId,
+      publicKey: this.publicKey,
+      messagesByID: Array.from(this.messagesByID.entries()).map(([id, msg]) => ({ id, ...msg })),
+      messageOrder: this.messageOrder,
+      lastParent: this.lastParent,
+      timestamp: Date.now()
+    };
+  }
+
+  loadState(state) {
+    this.messagesByID.clear();
+    this.messageOrder = state.messageOrder || [];
+    this.lastParent = state.lastParent || null;
+    this.parentLinks.clear();
+
+    for (const msg of state.messagesByID) {
+      this.messagesByID.set(msg.id, msg);
+      this.parentLinks.set(msg.id, msg.parent);
+    }
+  }
+
+  merge(otherState) {
+    const before = new Map(this.messagesByID);
+
+    for (const msg of otherState.messagesByID) {
+      if (!this.messagesByID.has(msg.id)) {
+        if (!msg.parent || this.messagesByID.has(msg.parent)) {
+          this.messagesByID.set(msg.id, msg);
+          this.parentLinks.set(msg.id, msg.parent);
+          if (!this.messageOrder.includes(msg.id)) {
+            this.messageOrder.push(msg.id);
+          }
+        }
+      }
+    }
+
+    return this.messagesByID.size > before.size;
+  }
+}
+
+// ============================================================
+// UI & PERSISTENCE
+// ============================================================
+
+const states = {
+  1: new ConversationState(1),
+  2: new ConversationState(2)
+};
+
+function persistState(device) {
+  localStorage.setItem(`state${device}`, JSON.stringify(states[device].getState()));
+}
+
+function restoreState(device) {
+  const saved = localStorage.getItem(`state${device}`);
+  if (saved) {
+    try {
+      const state = JSON.parse(saved);
+      states[device].loadState(state);
+    } catch (e) {
+      console.error('Failed to restore state', e);
+    }
+  }
+}
+
+function sendMessage(device) {
+  const input = document.getElementById(`input${device}`);
+  const text = input.value.trim();
+  if (!text) return;
+
+  const msg = states[device].addMessage(text, states[device].publicKey);
+  persistState(device);
+  renderChat(device);
+  input.value = '';
+
+  // Simulate network: peer receives message
+  setTimeout(() => {
+    const otherDevice = device === 1 ? 2 : 1;
+    const changed = states[otherDevice].merge(states[device].getState());
+    if (changed) {
+      persistState(otherDevice);
+      renderChat(otherDevice);
+      updateStatus(otherDevice);
+    }
+  }, 300);
+}
+
+function renderChat(device) {
+  const chat = document.getElementById(`chat${device}`);
+  const messages = Array.from(states[device].messagesByID.values()).sort((a, b) => a.timestamp - b.timestamp);
+
+  // Preserve timestamp row
+  const timestampRow = chat.querySelector('.timestamp');
+  chat.innerHTML = '';
+  if (timestampRow) chat.appendChild(timestampRow);
+
+  for (const msg of messages) {
+    const isOwn = msg.author === states[device].publicKey;
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `message ${isOwn ? 'sent' : 'received'}`;
+    msgDiv.innerHTML = `
+      <div class="message-wrapper">
+        <div class="bubble">${escapeHtml(msg.ciphertext)}</div>
+        <div class="status-badge ${isOwn ? 'synced' : ''}">
+          ${isOwn ? '✓ Synced' : 'From ' + msg.author.substring(0, 6)}
+        </div>
+      </div>
+    `;
+    chat.appendChild(msgDiv);
+  }
+
+  chat.scrollTop = chat.scrollHeight;
+  updateInfo(device);
+}
+
+function updateStatus(device) {
+  const invariants = states[device].validateInvariants();
+  const statusDot = document.querySelector(`#device${device} .status-dot`);
+  const statusText = document.querySelector(`#status${device}`);
+
+  if (invariants.allValid) {
+    statusDot.classList.add('synced');
+    statusText.textContent = 'Converged';
+  } else {
+    statusDot.classList.remove('synced');
+    statusText.textContent = 'Invalid state!';
+  }
+}
+
+function updateInfo(device) {
+  document.getElementById(`pk${device}`).textContent = states[device].publicKey;
+  const convHash = hashString(Array.from(states[device].messagesByID.keys()).join(','));
+  document.getElementById(`convHash${device}`).textContent = convHash;
+  document.getElementById(`msgCount${device}`).textContent = states[device].messagesByID.size;
+
+  const inv = states[device].validateInvariants();
+  const invText = [
+    `✓ No cycles: ${inv.noCycles}`,
+    `✓ All signed: ${inv.allSigned}`,
+    `✓ Causal closure: ${inv.causalClosure}`
+  ].join('\n');
+  document.getElementById(`invariants${device}`).textContent = invText;
+
+  const debugInfo = {
+    messages: states[device].messagesByID.size,
+    lastParent: states[device].lastParent ? states[device].lastParent.substring(0, 8) : 'null',
+    order: states[device].messageOrder.map(id => id.substring(0, 6)).join(' → ')
+  };
+  document.getElementById(`debug${device}`).textContent = JSON.stringify(debugInfo, null, 2);
+}
+
+function toggleInfo(device) {
+  const panel = document.getElementById(`info${device}`);
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) {
+    updateInfo(device);
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function manualSync() {
+  const state1 = states[1].getState();
+  const state2 = states[2].getState();
+
+  const changed1 = states[1].merge(state2);
+  const changed2 = states[2].merge(state1);
+
+  if (changed1) {
+    persistState(1);
+    renderChat(1);
+  }
+  if (changed2) {
+    persistState(2);
+    renderChat(2);
+  }
+
+  updateStatus(1);
+  updateStatus(2);
+}
+
+function testCausalOrdering() {
+  const inv1 = states[1].validateInvariants();
+  const inv2 = states[2].validateInvariants();
+
+  const msg = `Device 1: ${inv1.allValid ? '✓ VALID' : '✗ INVALID'}\nDevice 2: ${inv2.allValid ? '✓ VALID' : '✗ INVALID'}\n\nDAG 1: ${states[1].messageOrder.length} messages\nDAG 2: ${states[2].messageOrder.length} messages`;
+  alert(msg);
+}
+
+function disconnect() {
+  alert('Network disconnected. Messages will sync when reconnected.');
+}
+
+function reset() {
+  if (confirm('Reset all conversation state?')) {
+    states[1] = new ConversationState(1);
+    states[2] = new ConversationState(2);
+    localStorage.clear();
+    renderChat(1);
+    renderChat(2);
+    updateStatus(1);
+    updateStatus(2);
+  }
+}
+
+// Initialize
+document.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    if (e.target.id === 'input1') sendMessage(1);
+    if (e.target.id === 'input2') sendMessage(2);
+  }
+});
+
+restoreState(1);
+restoreState(2);
+renderChat(1);
+renderChat(2);
+updateStatus(1);
+updateStatus(2);
+
+// Auto-sync every 2 seconds (simulating peer discovery)
+setInterval(() => {
+  manualSync();
+}, 2000);
+</script>
+
+</body>
+</html>
